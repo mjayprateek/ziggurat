@@ -86,5 +86,5 @@
       (NoopTracerFactory/create))))
 
 (defstate tracer
-  :start (create-tracer)
+  :start (^Tracer create-tracer)
   :stop #())

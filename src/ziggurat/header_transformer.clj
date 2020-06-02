@@ -2,7 +2,7 @@
   (:import [org.apache.kafka.streams.kstream ValueTransformer]
            [org.apache.kafka.streams.processor ProcessorContext]))
 
-(deftype HeaderTransformer [^{:volatile-mutable true} processor-context] ValueTransformer
+(deftype HeaderTransformer [^{:volatile-mutable true} ^ProcessorContext processor-context] ValueTransformer
          (^void init [_ ^ProcessorContext context]
            (do (set! processor-context context)
                nil))

@@ -17,7 +17,7 @@
                (get-current-time-in-millis)
                ingestion-time))))
 
-(deftype TimestampTransformer [^{:volatile-mutable true} processor-context metric-namespace oldest-processed-message-in-s additional-tags] Transformer
+(deftype TimestampTransformer [^{:volatile-mutable true} ^ProcessorContext processor-context metric-namespace oldest-processed-message-in-s additional-tags] Transformer
          (^void init [_ ^ProcessorContext context]
            (do (set! processor-context context)
                nil))

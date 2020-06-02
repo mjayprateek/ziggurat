@@ -8,7 +8,8 @@
            [com.gojek.metrics.datadog DatadogReporter]
            [java.util.concurrent TimeUnit]
            [io.dropwizard.metrics5 Histogram Meter MetricName MetricRegistry]
-           (ziggurat.metrics_interface MetricsProtocol)))
+           (ziggurat.metrics_interface MetricsProtocol)
+           (java.util Map)))
 
 (defonce metrics-registry
   (MetricRegistry.))
@@ -39,7 +40,7 @@
 
 (defn- get-tagged-metric
   [metric-name tags]
-  (.tagged ^MetricName metric-name tags))
+  (.tagged ^MetricName metric-name ^Map tags))
 
 (defn mk-meter
   ([category metric]
@@ -69,7 +70,7 @@
 (defn update-histogram
   [namespace metric tags value]
   (let [histogram (mk-histogram namespace metric tags)]
-    (.update ^Histogram histogram value)))
+    (.update ^Histogram histogram ^long value)))
 
 (deftype DropwizardMetrics []
   MetricsProtocol

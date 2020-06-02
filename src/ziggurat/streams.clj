@@ -16,13 +16,14 @@
            [org.apache.kafka.common.serialization Serdes]
            [org.apache.kafka.common.utils SystemTime]
            [org.apache.kafka.streams KafkaStreams StreamsConfig StreamsBuilder Topology]
-           [org.apache.kafka.streams.kstream ValueMapper TransformerSupplier ValueTransformerSupplier]
+           [org.apache.kafka.streams.kstream ValueMapper TransformerSupplier ValueTransformerSupplier KStream]
            [org.apache.kafka.streams.state.internals KeyValueStoreBuilder RocksDbKeyValueBytesStoreSupplier]
            [ziggurat.timestamp_transformer IngestionTimeExtractor]
-           [io.opentracing Tracer]
+           [io.opentracing Tracer Tracer$SpanBuilder Span]
            [io.opentracing.contrib.kafka.streams TracingKafkaClientSupplier]
            [io.opentracing.contrib.kafka TracingKafkaUtils]
-           [io.opentracing.tag Tags]))
+           [io.opentracing.tag Tags]
+           (io.jaegertracing.internal JaegerTracer$SpanBuilder)))
 
 (def default-config-for-stream
   {:buffered-records-per-partition     10000
@@ -102,7 +103,7 @@
     (metrics/multi-ns-increment-count multi-namespaces metric additional-tags))
   message)
 
-(defn store-supplier-builder []
+(defn ^KeyValueStoreBuilder store-supplier-builder []
   (KeyValueStoreBuilder. (RocksDbKeyValueBytesStoreSupplier. "state-store")
                          (Serdes/ByteArray)
                          (Serdes/ByteArray)
@@ -120,7 +121,7 @@
   (reify TransformerSupplier
     (get [_] (timestamp-transformer/create metric-namespaces oldest-processed-message-in-s additional-tags))))
 
-(defn- header-transformer-supplier
+(defn- ^ValueTransformerSupplier header-transformer-supplier
   []
   (reify ValueTransformerSupplier
     (get [_] (header-transformer/create))))
@@ -130,22 +131,22 @@
         delay-metric-namespace "message-received-delay-histogram"
         metric-namespaces [service-name topic-entity-name delay-metric-namespace]
         additional-tags  {:topic_name topic-entity-name}]
-    (.transform stream-builder (timestamp-transformer-supplier metric-namespaces oldest-processed-message-in-s additional-tags) (into-array [(.name (store-supplier-builder))]))))
+    (.transform ^KStream stream-builder (timestamp-transformer-supplier metric-namespaces oldest-processed-message-in-s additional-tags) (into-array [(.name (store-supplier-builder))]))))
 
-(defn- header-transform-values [stream-builder]
+(defn- header-transform-values [^KStream stream-builder]
   (.transformValues stream-builder (header-transformer-supplier) (into-array [(.name (store-supplier-builder))])))
 
 (declare stream)
 
 (defn stop-streams [streams]
   (log/debug "Stopping Kafka streams")
-  (doseq [stream streams]
+  (doseq [^KafkaStreams stream streams]
     (.close stream)))
 
 (defn- traced-handler-fn [handler-fn channels message topic-entity]
-  (let [parent-ctx (TracingKafkaUtils/extractSpanContext (:headers message) tracer)
-        span (as-> tracer t
-               (.buildSpan t "Message-Handler")
+  (let [parent-ctx (TracingKafkaUtils/extractSpanContext (:headers message) ^Tracer tracer)
+        span (as-> ^Tracer tracer t
+               (^JaegerTracer$SpanBuilder .buildSpan t "Message-Handler")
                (.withTag t (.getKey Tags/SPAN_KIND) Tags/SPAN_KIND_CONSUMER)
                (.withTag t (.getKey Tags/COMPONENT) "ziggurat")
                (if (nil? parent-ctx)
@@ -158,21 +159,21 @@
         (log/error "Stopping Kafka Streams due to error: " e)
         (stop-streams stream))
       (finally
-        (.finish span)))))
+        (.finish ^Span span)))))
 
 (defn- topology [handler-fn {:keys [origin-topic oldest-processed-message-in-s]} topic-entity channels]
   (let [builder           (StreamsBuilder.)
         topic-entity-name (name topic-entity)
         topic-pattern     (Pattern/compile origin-topic)]
     (.addStateStore builder (store-supplier-builder))
-    (->> (.stream builder topic-pattern)
+    (->> (^KStream .stream builder topic-pattern)
          (timestamp-transform-values topic-entity-name oldest-processed-message-in-s)
          (header-transform-values)
          (map-values #(log-and-report-metrics topic-entity-name %))
          (map-values #(traced-handler-fn handler-fn channels % topic-entity)))
     (.build builder)))
 
-(defn- start-stream* [handler-fn stream-config topic-entity channels]
+(defn- ^KafkaStreams start-stream* [handler-fn stream-config topic-entity channels]
   (KafkaStreams. ^Topology (topology handler-fn stream-config topic-entity channels)
                  ^Properties (properties stream-config)
                  (new TracingKafkaClientSupplier tracer)))
