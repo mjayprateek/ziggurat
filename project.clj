@@ -1,9 +1,10 @@
-(defproject tech.gojek/ziggurat "3.4.2-alpha.4"
+(defproject tech.gojek/ziggurat "3.4.2-alpha.5"
   :description "A stream processing framework to build stateless applications on kafka"
   :url "https://github.com/gojektech/ziggurat"
   :license {:name "Apache License, Version 2.0"
             :url  "https://www.apache.org/licenses/LICENSE-2.0"}
-  :dependencies [[bidi "2.1.6"]
+  :dependencies [[com.gojek.esb/esb-log-entities "6.688.0"]
+                 [bidi "2.1.6"]
                  [camel-snake-kebab "0.4.0"]
                  [cheshire "5.9.0"]
                  [clonfig "0.2.0"]
@@ -58,6 +59,8 @@
   :aliases {"test-all"      ["with-profile" "default:+1.8:+1.9" "test"]
             "code-coverage" ["with-profile" "test" "cloverage" "--output" "coverage" "--coveralls"]}
   :aot [ziggurat.init ziggurat.config ziggurat.producer ziggurat.sentry ziggurat.metrics ziggurat.fixtures]
+  :repositories {"Go-jek"     "http://artifactory-gojek.golabs.io/artifactory/gojek-release-local",
+                 "Gojek-Libs" "http://artifactory-gojek.golabs.io/artifactory/libs-release-local"}
   :profiles {:uberjar {:aot         :all
                        :global-vars {*warn-on-reflection* true}
                        :pedantic?   :abort}

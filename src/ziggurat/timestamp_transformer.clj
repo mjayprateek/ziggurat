@@ -37,14 +37,14 @@
 (defn- get-key-proto-class
   [topic]
   (if (= topic "driver-reward-points")
-    "com.gojek.esb.driverrewards.DriverRewardPointLogKey"
-    "com.gojek.esb.driverstatistics.DriverStatsUpdatedLogKey"))
+    com.gojek.esb.driverrewards.DriverRewardPointLogKey
+    com.gojek.esb.driverstatistics.DriverStatsUpdatedLogKey))
 
 (defn- get-value-proto-class
   [topic]
   (if (= topic "driver-reward-points")
-    "com.gojek.esb.driverrewards.DriverRewardPointsLogMessage"
-    "com.gojek.esb.driverstatistics.DriverStatsUpdatedLogMessage"))
+    com.gojek.esb.driverrewards.DriverRewardPointsLogMessage
+    com.gojek.esb.driverstatistics.DriverStatsUpdatedLogMessage))
 
 (deftype TimestampTransformer [^{:volatile-mutable true} processor-context metric-namespace oldest-processed-message-in-s additional-tags] Transformer
          (^void init [_ ^ProcessorContext context]
