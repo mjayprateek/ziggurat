@@ -1,6 +1,6 @@
 (ns ziggurat.messaging.consumer
   (:require [ziggurat.mapper :as mpr]
-            [ziggurat.message-payload :as mp]
+            [ziggurat.message-payload :as mp :refer[->MessagePayload]]
             [clojure.tools.logging :as log]
             [langohr.basic :as lb]
             [langohr.channel :as lch]
@@ -11,6 +11,7 @@
             [taoensso.nippy :as nippy]
             [ziggurat.config :refer [get-in-config]]
             [ziggurat.messaging.connection :refer [connection]]
+            [ziggurat.messaging.producer :refer [publish-to-dead-queue]]
             [ziggurat.sentry :refer [sentry-reporter]]
             [ziggurat.messaging.util :refer :all]
             [ziggurat.metrics :as metrics]))
@@ -33,14 +34,15 @@
 (defn convert-and-ack-message
   "De-serializes the message payload (`payload`) using `nippy/thaw` and converts it to `MessagePayload`. Acks the message
   if `ack?` is true."
-  [ch {:keys [delivery-tag] :as meta} ^bytes payload ack? topic-entity]
+  [ch {:keys [delivery-tag] :as meta} ^bytes payload ack? topic-entity channel]
   (try
     (let [message (nippy/thaw payload)]
       (when ack?
         (lb/ack ch delivery-tag))
       (convert-to-message-payload message topic-entity))
     (catch Exception e
-      (lb/reject ch delivery-tag false)
+      ;;(lb/reject ch delivery-tag false)
+      (publish-to-dead-queue (->MessagePayload ))
       (sentry/report-error sentry-reporter e "Error while decoding message")
       (metrics/increment-count ["rabbitmq-message" "conversion"] "failure" {:topic_name (name topic-entity)})
       nil)))
@@ -49,9 +51,9 @@
   [ch delivery-tag]
   (lb/ack ch delivery-tag))
 
-(defn process-message-from-queue [ch meta payload topic-entity processing-fn]
+(defn process-message-from-queue [ch meta payload topic-entity channel processing-fn]
   (let [delivery-tag (:delivery-tag meta)
-        message-payload      (convert-and-ack-message ch meta payload false topic-entity)]
+        message-payload      (convert-and-ack-message ch meta payload false topic-entity channel)]
     (when message-payload
       (log/infof "Processing message [%s] from RabbitMQ " message-payload)
       (try
@@ -105,15 +107,15 @@
                 (when (some? payload)
                   (process-message-from-queue ch meta payload topic-entity processing-fn))))))))
 
-(defn- message-handler [wrapped-mapper-fn topic-entity]
+(defn- message-handler [wrapped-mapper-fn topic-entity channel]
   (fn [ch meta ^bytes payload]
-    (process-message-from-queue ch meta payload topic-entity wrapped-mapper-fn)))
+    (process-message-from-queue ch meta payload topic-entity channel wrapped-mapper-fn)))
 
-(defn- start-subscriber* [ch prefetch-count queue-name wrapped-mapper-fn topic-entity]
+(defn- start-subscriber* [ch prefetch-count queue-name wrapped-mapper-fn topic-entity channel]
   (lb/qos ch prefetch-count)
   (let [consumer-tag (lcons/subscribe ch
                                       queue-name
-                                      (message-handler wrapped-mapper-fn topic-entity)
+                                      (message-handler wrapped-mapper-fn topic-entity channel)
                                       {:handle-shutdown-signal-fn (fn [consumer_tag reason]
                                                                     (log/infof "channel closed with consumer tag: %s, reason: %s " consumer_tag, reason))
                                        :handle-consume-ok-fn      (fn [consumer_tag]
@@ -126,7 +128,8 @@
                          (get-in-config [:jobs :instant :prefetch-count])
                          (prefixed-queue-name topic-entity (get-in-config [:rabbit-mq :instant :queue-name]))
                          handler-fn
-                         topic-entity))))
+                         topic-entity
+                         nil))))
 
 (defn start-channels-subscriber [channels topic-entity]
   (doseq [channel channels]
@@ -137,7 +140,8 @@
                            1
                            (prefixed-channel-name topic-entity channel-key (get-in-config [:rabbit-mq :instant :queue-name]))
                            (mpr/channel-mapper-func channel-handler-fn channel-key)
-                           topic-entity)))))
+                           topic-entity
+                           channel-key)))))
 
 (defn start-subscribers
   "Starts the subscriber to the instant queue of the rabbitmq"
