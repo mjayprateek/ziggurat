@@ -60,7 +60,7 @@
                                     :sign-releases false}]]
   :pedantic? :warn
   :java-source-paths ["src/com"]
-  :aliases {"code-coverage" ["with-profile" "test" "cloverage" "--output" "coverage" "--coveralls"]}
+  :aliases {"code-coverage" ["with-profile" "test" "cloverage" "--output" "coverage" "--lcov"]}
   :aot [ziggurat.init ziggurat.config ziggurat.producer ziggurat.sentry ziggurat.metrics ziggurat.fixtures]
   :profiles {:uberjar {:aot         :all
                        :global-vars {*warn-on-reflection* true}

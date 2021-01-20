@@ -18,7 +18,4 @@ test: setup
 
 coverage: setup
 	lein code-coverage
-ifdef COVERALLS_URL
-		curl --form 'json_file=@coverage/coveralls.json' "$(COVERALLS_URL)"
-endif
-		docker-compose down
+	docker-compose down
